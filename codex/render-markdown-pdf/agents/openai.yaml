@@ -1,0 +1,4 @@
+interface:
+  display_name: "Render Markdown PDF"
+  short_description: "Render Markdown to PDF with Pandoc + XeLaTeX"
+  default_prompt: "Use $render-markdown-pdf to render or troubleshoot Markdown-to-PDF output with strict Pandoc formatting rules and XeLaTeX toolchain checks."
