@@ -41,6 +41,7 @@ header-includes: |
   \usepackage[strings]{underscore}
   
   \usepackage{etoolbox}
+  \apptocmd{\tableofcontents}{\clearpage}{}{}
   \usepackage{longtable}
   \usepackage{array}
   
