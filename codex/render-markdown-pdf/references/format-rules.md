@@ -12,9 +12,15 @@ pandoc input.md -o output.pdf -d defaults.yaml
 - `pdf-engine: xelatex`
 - `filters: [full-width-tables.lua]`
 
+## Heading Rules
+
+- Deep headings such as `####` and `#####` are supported in this skill.
+- The bundled template remaps LaTeX `\paragraph` and `\subparagraph` to block headings so the heading and following paragraph do not run together on one line.
+
 ## Table Rules
 
 - Use standard pipe-table Markdown.
+- Prefer ordinary Markdown cell text. Do not use raw TeX cell hacks like `\shortstack`, `\raisebox`, or `\parbox` as the default approach.
 - Put the caption immediately after the table:
   `Table: <caption>`
 - Keep one blank line after the caption.
@@ -22,6 +28,8 @@ pandoc input.md -o output.pdf -d defaults.yaml
   - `:---` left
   - `:---:` center
   - `---:` right
+- Tables with 8 or more columns should get a visual PDF check after rendering.
+- The bundled Lua filter keeps tables full-width, preserves explicit Pandoc width ratios when present, and otherwise assigns widths by content so IP/端口/Seq/Ack/备注 columns do not all get forced to the same width.
 
 ## Image Rules
 
@@ -65,3 +73,10 @@ curl -L https://github.com/Wandmalfarbe/pandoc-latex-template/releases/latest/do
 - Use Mermaid CLI (`mmdc`) for flowchart images.
 - Use `carbon-now-cli` (`carbon-now`) for execution-output screenshots.
 - Confirm command flags with local `--help` because CLI options vary by version.
+
+## Known Issues And Fixes
+
+- Run-in headings:
+  The root cause is LaTeX sectioning defaults, where `\paragraph` and `\subparagraph` behave like inline headings. This skill template overrides them to block headings.
+- Uneven-looking IP and remark cells:
+  The usual root cause is not a single broken cell. It is the equal-width column strategy squeezing heterogeneous columns too narrowly, which makes wrapped IP text and long remarks look misaligned. The bundled filter now allocates width by content class instead.

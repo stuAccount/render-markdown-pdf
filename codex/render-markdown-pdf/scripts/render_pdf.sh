@@ -46,6 +46,14 @@ EOF
   exit 127
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[error] python3 is required to run markdown_preflight.py.
+Install it manually and re-run this command.
+EOF
+  exit 127
+fi
+
 # Some shells (including app sandboxes) may not include TeX paths by default.
 if ! command -v xelatex >/dev/null 2>&1; then
   if [[ -x /Library/TeX/texbin/xelatex ]]; then
@@ -92,14 +100,18 @@ fi
 output_dir="$(dirname "$output_path")"
 mkdir -p "$output_dir"
 
-input_abs="$(cd "$(dirname "$input_path")" && pwd)/$(basename "$input_path")"
+input_dir="$(cd "$(dirname "$input_path")" && pwd)"
+input_abs="$input_dir/$(basename "$input_path")"
 output_abs="$(cd "$output_dir" && pwd)/$(basename "$output_path")"
 defaults_dir="$(cd "$(dirname "$defaults_file")" && pwd)"
 defaults_name="$(basename "$defaults_file")"
+resource_path="${RESOURCE_PATH:-$input_dir:$input_dir/images:$skill_dir}"
+
+python3 "$script_dir/markdown_preflight.py" "$input_abs"
 
 (
   cd "$defaults_dir"
-  pandoc "$input_abs" -o "$output_abs" -d "$defaults_name"
+  pandoc "$input_abs" -o "$output_abs" -d "$defaults_name" --resource-path="$resource_path"
 )
 
 echo "[ok] Rendered PDF: $output_abs"

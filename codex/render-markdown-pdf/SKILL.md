@@ -1,6 +1,6 @@
 ---
 name: render-markdown-pdf
-description: Render Markdown documents to PDF with Pandoc + XeLaTeX (including Eisvogel and full-width table filtering). Use when creating or debugging `.md` to `.pdf` output that depends on strict spacing-sensitive formatting rules for lists, images, code blocks, and table captions.
+description: Render Markdown documents to PDF with Pandoc + XeLaTeX (including Eisvogel and full-width table filtering). Use when creating or debugging `.md` to `.pdf` output that depends on strict spacing-sensitive formatting rules for lists, images, code blocks, table captions, deep heading layout, and heterogeneous CJK tables.
 ---
 
 # Render Markdown PDF
@@ -10,14 +10,15 @@ Run this workflow to produce reliable PDF output from Markdown with the renderin
 ## Core Workflow
 
 1. Ensure the Markdown contains the pre-written frontmatter preamble from **Required Templates**.
-2. Ensure the Lua filter file matches the template from **Required Templates**.
+2. Ensure the Lua filter file matches the bundled version from **Required Templates**.
 3. Run `scripts/markdown_preflight.py <input.md>` before rendering.
 4. Run `scripts/render_pdf.sh <input.md> [output.pdf]`.
-5. If rendering fails, follow troubleshooting in `references/format-rules.md`.
+5. If you are modifying the skill itself, run `scripts/check_regressions.sh`.
+6. If rendering fails, follow troubleshooting in `references/format-rules.md`.
 
 ## Required Templates (Must Include for Rendering)
 
-The following two templates are mandatory in this workflow and should be copy-paste ready.
+Reuse the bundled template files verbatim. They are the supported baseline for heading layout, CJK fonts, and full-width table handling.
 
 ### 1) Pre-written Markdown Preamble (frontmatter)
 
@@ -38,10 +39,32 @@ geometry: "top=2.5cm, bottom=3.5cm, left=3cm, right=2.5cm"
 header-includes: |
   \usepackage{xeCJK}
   \usepackage{fontspec}
+  \usepackage{titlesec}
   
-  \setmainfont[Scale=0.9]{DejaVu Sans}
-  \setCJKmainfont{PingFang SC}
-  \setmonofont[Scale=0.9]{Menlo}
+  \IfFontExistsTF{DejaVu Sans}{
+    \setmainfont[Scale=0.9]{DejaVu Sans}
+  }{
+    \IfFontExistsTF{Helvetica Neue}{
+      \setmainfont[Scale=0.9]{Helvetica Neue}
+    }{
+      \setmainfont[Scale=0.9]{Arial}
+    }
+  }
+  \IfFontExistsTF{PingFang SC}{
+    \setCJKmainfont{PingFang SC}
+  }{
+    \setCJKmainfont{Songti SC}
+  }
+  \IfFontExistsTF{Menlo}{
+    \setmonofont[Scale=0.9]{Menlo}
+  }{
+    \setmonofont[Scale=0.9]{Courier New}
+  }
+
+  \titleformat{\paragraph}[block]{\normalfont\normalsize\bfseries}{}{0pt}{}
+  \titlespacing*{\paragraph}{0pt}{1.2ex plus .2ex minus .1ex}{0.8ex}
+  \titleformat{\subparagraph}[block]{\normalfont\normalsize\bfseries}{}{0pt}{}
+  \titlespacing*{\subparagraph}{0pt}{1.2ex plus .2ex minus .1ex}{0.8ex}
 
   \usepackage{float}
   \let\origfigure\figure
@@ -70,8 +93,8 @@ header-includes: |
   
   \setlength{\LTleft}{0pt}
   \setlength{\LTright}{0pt}
-  \setlength{\tabcolsep}{12pt}
-  \renewcommand{\arraystretch}{1.8}
+  \setlength{\tabcolsep}{8pt}
+  \renewcommand{\arraystretch}{1.5}
   
   \AtBeginEnvironment{longtable}{
     \small
@@ -91,30 +114,12 @@ header-includes: |
 
 ### 2) Pre-written Lua Filter Template (`assets/pandoc/full-width-tables.lua`)
 
-```lua
--- Lua filter to force all tables to use full textwidth
--- by converting column specs to proportional widths
+Use the bundled Lua filter at `assets/pandoc/full-width-tables.lua` verbatim.
 
-function Table(tbl)
-  -- Get number of columns
-  local num_cols = #tbl.colspecs
-  
-  if num_cols == 0 then
-    return tbl
-  end
-  
-  -- Calculate equal width for each column (proportional)
-  local width = 1.0 / num_cols
-  
-  -- Replace all column specs with proportional width
-  for i = 1, num_cols do
-    local align = tbl.colspecs[i][1]  -- Keep original alignment
-    tbl.colspecs[i] = {align, width}  -- Set proportional width
-  end
-  
-  return tbl
-end
-```
+- It preserves explicit Pandoc column width ratios by normalizing them to full text width.
+- When width metadata is absent, it samples the header and first body rows, then allocates width by visible content length and column type.
+- It keeps alignment unchanged.
+- It is designed to make ordinary pipe tables work without relying on `\shortstack`, `\raisebox`, or `\parbox` hacks in table cells.
 
 ## Toolchain Checks (Mandatory)
 
@@ -148,7 +153,9 @@ curl -L https://github.com/Wandmalfarbe/pandoc-latex-template/releases/latest/do
 
 Apply the required Markdown contract in `references/format-rules.md`. Enforce:
 
+- Deep headings such as `####` and `#####` are supported in this skill because the template remaps `\paragraph` / `\subparagraph` to block headings.
 - Table caption line immediately after each table: `Table: ...`, then one blank line.
+- Prefer normal Markdown table cells. Do not default to raw TeX hacks like `\shortstack`, `\raisebox`, or `\parbox`.
 - Image lines as standalone Markdown image syntax, path under `images/`, with one blank line above and below.
 - A blank line before every list block (critical for Pandoc parsing).
 - Fenced code blocks using triple backticks with explicit language and blank lines before/after.
@@ -164,7 +171,7 @@ pandoc input.md -o output.pdf -d defaults.yaml
 Use `scripts/render_pdf.sh` to run this safely with bundled defaults and checks.
 
 If images are under `images/` relative to the document, but rendering is launched from another directory,
-set a defaults override with `resource-path` and pass it with `DEFAULTS_FILE`.
+set `RESOURCE_PATH` (or a defaults override with `resource-path`) so Pandoc can still resolve them correctly.
 
 ## Mermaid and Output Screenshots
 
@@ -175,8 +182,15 @@ set a defaults override with `resource-path` and pass it with `DEFAULTS_FILE`.
 ## Bundled Resources
 
 - `assets/pandoc/defaults.yaml`: Pandoc defaults (`pdf-engine: xelatex`, `full-width-tables.lua` filter).
-- `assets/pandoc/full-width-tables.lua`: Lua filter that makes table columns proportional to full text width.
-- `assets/pandoc/doc_template.md`: Reference frontmatter for Eisvogel + XeLaTeX + CJK settings.
-- `scripts/markdown_preflight.py`: Validates formatting rules that commonly break Pandoc rendering.
-- `scripts/render_pdf.sh`: Runs preflight dependency checks and renders PDF.
+- `assets/pandoc/full-width-tables.lua`: Lua filter that keeps tables full-width while preserving explicit widths or assigning content-aware widths for heterogeneous tables.
+- `assets/pandoc/doc_template.md`: Reference frontmatter for Eisvogel + XeLaTeX + CJK settings, including stable deep heading layout.
+- `scripts/markdown_preflight.py`: Validates formatting rules that commonly break Pandoc rendering and emits warnings for risky table patterns.
+- `scripts/render_pdf.sh`: Runs preflight checks, applies resource-path defaults, and renders PDF.
+- `scripts/check_regressions.sh`: Renders bundled regression fixtures and checks heading / table layout regressions.
+- `examples/regressions/`: Smoke and regression fixtures for headings, heterogeneous tables, and general CJK reports.
 - `references/format-rules.md`: Rule reference and troubleshooting checklist.
+
+## Troubleshooting Highlights
+
+- If a `####` or deeper heading appears on the same line as the next paragraph, verify the document is using the bundled template or equivalent `titlesec` overrides.
+- If IP, port, Seq/Ack, and remark columns all look squeezed or visually misaligned, avoid hand-tuned TeX in cells first; use the bundled Lua filter and inspect the rendered PDF before adding manual workarounds.

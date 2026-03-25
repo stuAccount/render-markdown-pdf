@@ -1,5 +1,4 @@
 ---
-
 title: "title"
 author: "author"
 date: "date"
@@ -15,10 +14,32 @@ geometry: "top=2.5cm, bottom=3.5cm, left=3cm, right=2.5cm"
 header-includes: |
   \usepackage{xeCJK}
   \usepackage{fontspec}
+  \usepackage{titlesec}
   
-  \setmainfont[Scale=0.9]{DejaVu Sans}
-  \setCJKmainfont{PingFang SC}
-  \setmonofont[Scale=0.9]{Menlo}
+  \IfFontExistsTF{DejaVu Sans}{
+    \setmainfont[Scale=0.9]{DejaVu Sans}
+  }{
+    \IfFontExistsTF{Helvetica Neue}{
+      \setmainfont[Scale=0.9]{Helvetica Neue}
+    }{
+      \setmainfont[Scale=0.9]{Arial}
+    }
+  }
+  \IfFontExistsTF{PingFang SC}{
+    \setCJKmainfont{PingFang SC}
+  }{
+    \setCJKmainfont{Songti SC}
+  }
+  \IfFontExistsTF{Menlo}{
+    \setmonofont[Scale=0.9]{Menlo}
+  }{
+    \setmonofont[Scale=0.9]{Courier New}
+  }
+
+  \titleformat{\paragraph}[block]{\normalfont\normalsize\bfseries}{}{0pt}{}
+  \titlespacing*{\paragraph}{0pt}{1.2ex plus .2ex minus .1ex}{0.8ex}
+  \titleformat{\subparagraph}[block]{\normalfont\normalsize\bfseries}{}{0pt}{}
+  \titlespacing*{\subparagraph}{0pt}{1.2ex plus .2ex minus .1ex}{0.8ex}
 
   \usepackage{float}
   \let\origfigure\figure
@@ -47,8 +68,8 @@ header-includes: |
   
   \setlength{\LTleft}{0pt}
   \setlength{\LTright}{0pt}
-  \setlength{\tabcolsep}{12pt}
-  \renewcommand{\arraystretch}{1.8}
+  \setlength{\tabcolsep}{8pt}
+  \renewcommand{\arraystretch}{1.5}
   
   \AtBeginEnvironment{longtable}{
     \small
@@ -63,6 +84,4 @@ header-includes: |
     basicstyle=\ttfamily\small,
     columns=flexible,
   }
-
 ---
-

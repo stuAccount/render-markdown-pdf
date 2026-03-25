@@ -12,6 +12,7 @@ FENCE_RE = re.compile(r"^\s*```(.*)$")
 LIST_RE = re.compile(r"^([ \t]*)([-+*]|\d+\.)\s+")
 IMAGE_RE = re.compile(r"^\s*!\[[^\]]*\]\(([^)]+)\)\s*$")
 ALIGN_CELL_RE = re.compile(r"^:?-{3,}:?$")
+TABLE_TEX_HACK_RE = re.compile(r"\\(?:shortstack|raisebox|parbox)\b")
 
 
 def is_table_row(line: str) -> bool:
@@ -134,8 +135,9 @@ def check_lists(lines: List[str], code_lines: Set[int]) -> List[str]:
     return errors
 
 
-def check_tables(lines: List[str], code_lines: Set[int]) -> List[str]:
+def check_tables(lines: List[str], code_lines: Set[int]) -> Tuple[List[str], List[str]]:
     errors: List[str] = []
+    warnings: List[str] = []
     i = 0
     while i < len(lines):
         if i in code_lines:
@@ -143,9 +145,26 @@ def check_tables(lines: List[str], code_lines: Set[int]) -> List[str]:
             continue
 
         if i + 1 < len(lines) and is_table_row(lines[i]) and is_alignment_row(lines[i + 1]):
+            column_count = len(split_table_cells(lines[i]))
+            if column_count >= 8:
+                warnings.append(
+                    f"line {i + 1}: table has {column_count} columns; render the PDF and do a visual layout check."
+                )
+
             j = i + 2
             while j < len(lines) and j not in code_lines and is_table_row(lines[j]):
                 j += 1
+
+            for row_index in range(i, j):
+                if row_index == i + 1:
+                    continue
+                for cell in split_table_cells(lines[row_index]):
+                    match = TABLE_TEX_HACK_RE.search(cell)
+                    if match:
+                        warnings.append(
+                            f"line {row_index + 1}: found raw TeX table-cell hack '{match.group(0)}'; "
+                            "prefer the built-in column width allocation first."
+                        )
 
             if j >= len(lines) or not lines[j].startswith("Table:"):
                 errors.append(
@@ -167,24 +186,35 @@ def check_tables(lines: List[str], code_lines: Set[int]) -> List[str]:
 
         i += 1
 
-    return errors
+    return errors, warnings
 
 
 def run(path: Path) -> int:
     lines = path.read_text(encoding="utf-8").splitlines()
     errors: List[str] = []
+    warnings: List[str] = []
 
     code_lines, code_errors = collect_code_blocks(lines)
     errors.extend(code_errors)
     errors.extend(check_images(lines, code_lines))
     errors.extend(check_lists(lines, code_lines))
-    errors.extend(check_tables(lines, code_lines))
+    table_errors, table_warnings = check_tables(lines, code_lines)
+    errors.extend(table_errors)
+    warnings.extend(table_warnings)
 
     if errors:
         print(f"[fail] {path}")
         for err in errors:
             print(f" - {err}")
+        for warning in warnings:
+            print(f" - [warn] {warning}")
         return 1
+
+    if warnings:
+        print(f"[warn] {path}")
+        for warning in warnings:
+            print(f" - {warning}")
+        return 0
 
     print(f"[ok] {path}")
     return 0
