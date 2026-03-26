@@ -5,6 +5,7 @@
 local MAX_SAMPLE_ROWS = 8
 local MIN_WIDTH = 0.07
 local MAX_WIDTH = 0.28
+local SOFT_BREAK = utf8.char(0x200B)
 
 local SHORT_HEADER_KEYWORDS = {
   "ip",
@@ -132,6 +133,98 @@ local function is_long_text(text)
   end
 
   return false
+end
+
+local function should_soft_break_token(text)
+  text = normalize_space(text)
+  if text == "" or text:find("%s") then
+    return false
+  end
+
+  if visible_length(text) < 10 then
+    return false
+  end
+
+  if not text:find("[%.:/_%-]") then
+    return false
+  end
+
+  return text:match("^[%w%._:/%-]+$") ~= nil
+end
+
+local function add_soft_breaks(text)
+  if not should_soft_break_token(text) or text:find(SOFT_BREAK, 1, true) then
+    return text
+  end
+
+  local out = {}
+  for _, codepoint in utf8.codes(text) do
+    local ch = utf8.char(codepoint)
+    out[#out + 1] = ch
+    if ch == "." or ch == ":" or ch == "/" or ch == "_" or ch == "-" then
+      out[#out + 1] = SOFT_BREAK
+    end
+  end
+
+  return table.concat(out)
+end
+
+local function soften_block_tokens(block)
+  return block:walk({
+    Str = function(str)
+      local softened = add_soft_breaks(str.text)
+      if softened ~= str.text then
+        return pandoc.Str(softened)
+      end
+      return str
+    end,
+    Code = function(code)
+      local softened = add_soft_breaks(code.text)
+      if softened ~= code.text then
+        return pandoc.Code(softened, code.attr)
+      end
+      return code
+    end
+  })
+end
+
+local function soften_cell(cell)
+  local contents = pandoc.List()
+  for _, block in ipairs(cell.contents) do
+    contents:insert(soften_block_tokens(block))
+  end
+  cell.contents = contents
+  return cell
+end
+
+local function soften_row(row)
+  for i, cell in ipairs(row.cells or {}) do
+    row.cells[i] = soften_cell(cell)
+  end
+  return row
+end
+
+local function soften_table_tokens(tbl)
+  if tbl.head and tbl.head.rows then
+    for i, row in ipairs(tbl.head.rows) do
+      tbl.head.rows[i] = soften_row(row)
+    end
+  end
+
+  for body_index, body in ipairs(tbl.bodies or {}) do
+    for row_index, row in ipairs(body.body or {}) do
+      body.body[row_index] = soften_row(row)
+    end
+    tbl.bodies[body_index] = body
+  end
+
+  if tbl.foot and tbl.foot.rows then
+    for i, row in ipairs(tbl.foot.rows) do
+      tbl.foot.rows[i] = soften_row(row)
+    end
+  end
+
+  return tbl
 end
 
 local function normalize_widths(widths)
@@ -422,6 +515,8 @@ function Table(tbl)
   if not widths then
     widths = content_aware_widths(tbl)
   end
+
+  tbl = soften_table_tokens(tbl)
 
   for i = 1, num_cols do
     local align = tbl.colspecs[i][1]
